@@ -1,0 +1,19 @@
+#!/bin/bash
+# Unfinished but working
+
+if [ $# -ne 1 ]; then
+	echo "Usage: $0 CHANNEL"
+	exit 1
+fi
+lasttitle=""
+mplayer -quiet -cache 512 -playlist "http://nettradio.nrk.no/php/includes/channelstreamingurl.php?pichannel=$1&quality=h" | while read line; do
+	if [ "${line:0:8}" = "ICY Info" ]; then
+		title="$line"
+		title="${title#*\=\'}"
+		title="${title%\'\;}"
+		if [ "$title" != "$lasttitle" ]; then
+			lasttitle="$title"
+			echo $title
+		fi
+	fi
+done

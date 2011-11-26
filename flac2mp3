@@ -1,0 +1,32 @@
+#!/bin/bash
+
+if [ $# -eq 0 ]; then
+	echo "Usage: $0 FILE..."
+	exit 0
+fi
+
+function recode() {
+	file="$1"
+	echo "Recoding $file"
+	mp3file="$(sed 's/flac$/mp3/' <<< "$file")"
+
+	artist=$(metaflac --show-tag=artist "$file" | cut -d = -f 2-)
+	title=$(metaflac --show-tag=title "$file" | cut -d = -f 2-)
+	album=$(metaflac --show-tag=album "$file" | cut -d = -f 2-)
+	tracknumber=$(metaflac --show-tag=tracknumber "$file" | cut -d = -f 2-)
+	tracktotal=$(metaflac --show-tag=tracktotal "$file" | cut -d = -f 2-)
+
+	nice flac -dcs "$file" | lame --quiet - "$mp3file" || return
+	id3 -2 -altn "$artist" "$album" "$title" "$tracknumber/$tracktotal" "$mp3file" || return
+}
+
+files=()
+
+while [ $# -gt 0 ]; do
+	files+=("$1")
+	shift
+done
+
+. ~/.bin/recode_base
+
+recode_start

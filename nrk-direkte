@@ -1,0 +1,7 @@
+#!/bin/sh
+if [ $# -eq 1 ]; then
+	channel=$1
+else
+	channel=1
+fi
+~/.bin/nrk.py -e 'mplayer -cache 1024 -playlist {url}' http://www.nrk.no/nett-tv/direkte/nrk$channel/

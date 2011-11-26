@@ -1,0 +1,67 @@
+#!/bin/bash
+# This script is based on https://bbs.archlinux.org/viewtopic.php?pid=447447#p447447
+# Modified by Jon Bergli Heier to encode to mp3 and use job control
+# split image file (flac, ape, wav, etc.) according to cue-file
+
+if [ -f "$1" ]; then
+	i=0
+	for cuefile in *.cue; do
+		i=$(($i + 1))
+	done
+	if [ $i -eq 1 ]; then
+		# precies 1 cuesheet gevonden
+		if grep -q "INDEX 01 00:00:00" *.cue ; then
+			echo -n
+			nice shntool split -t "%n %t" -f *.cue "$1"
+		else
+			echo "The first track has a pre-gap. Shntool will cut that off and put it in a seperate file."
+			echo "You don't want that. Please modify the cuesheet from:"
+			grep -m1 "INDEX 00" *.cue
+			grep -m1 "INDEX 01" *.cue
+			echo "to:"
+			echo "    INDEX 01 00:00:00"
+			exit 1
+		fi
+	elif [ $i -eq 0 ]; then
+		echo "No cuesheet found in the current directory."
+		exit 1
+	elif [ $i -gt 1 ]; then
+		echo "$i cuesheets found in the current directory. Please remove the superfluous cuesheets."
+		exit 1
+	fi
+else
+	echo "Split image file (flac, ape, wav, etc.) according to cue-file."
+	echo "Output files are in FLAC."
+	echo "Usage: `basename $0` <image-file>"
+	exit 1
+fi
+
+album=$(grep -m 1 TITLE *.cue | cut -d\" -f2)
+artist=$(grep -m 1 PERFORMER *.cue | cut -d\" -f2)
+
+tracktotal=`ls [0-9]*.wav | wc -l`
+
+files=([0-9]*.wav)
+fp=0
+
+threads=$(grep -c ^processor /proc/cpuinfo)
+
+function recode() {
+	file="$1"
+	echo "Encoding $file"
+
+	if [[ ${file:0:1} == 0 ]] ; then
+		tracknr=${file:1:1}
+	else
+		tracknr=${file:0:2}
+	fi
+	title=$(echo ${file:2} | sed -e "s/.wav$//")
+
+	nice lame --quiet "$file" "$(echo $file | sed s/wav$/mp3/)" && rm "$file"
+	# use the id3 tool because lame produces garbage with non-ascii
+	id3 -2 -altn "$artist" "$album" "$title" "$tracknr/$tracktotal" "$(echo $file | sed s/wav$/mp3/)"
+}
+
+. ~/.bin/recode_base
+
+recode_start

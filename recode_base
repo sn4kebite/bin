@@ -1,0 +1,35 @@
+#!/bin/bash
+
+threads=$(grep -c ^processor /proc/cpuinfo)
+
+function spawn_recode() {
+	recode "${files[$fp]}" &
+	fp=$[$fp+1]
+	# avoid garbage on startup
+	sleep .1
+}
+
+function recode_start() {
+	# enable job control
+	set -m
+
+	echo "Starting $threads threads..."
+	for thread in $(seq $threads); do
+		spawn_recode
+	done
+
+	# spawn more jobs as they finish
+	while [ $fp -lt ${#files[@]} ]; do
+		[ $(jobs | wc -l) -lt $threads ] && spawn_recode
+		# ideally we should do some kind of poll/select here
+		sleep .1
+	done
+
+	# done spawning jobs, wait for them to finish
+	while [ 1 ]; do
+		fg &>/dev/null
+		[ $? == 1 ] && break
+	done
+
+	echo "All done!"
+}

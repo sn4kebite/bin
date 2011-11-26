@@ -1,0 +1,29 @@
+#!/bin/bash
+
+username="username"
+identifier="4c45138501a77c7aebfddb21d1f96d1b27d118df"
+host="http://example.com"
+
+if [ $# -lt 1 ]
+then
+	echo "Usage: $0 FILE..."
+fi
+
+while [ $# -gt 0 ]
+do
+	file="$1"
+	base="$(basename "$file")"
+	ext="${base##*.}"
+	shift 1
+	response="$(curl -s -b "username=$username; identifier=$identifier" -F "file=@$file" -F "filename=$base" -F "api=1" -H 'Expect:' $host/u)"
+	result="$(echo "$response" | cut -d ' ' -f 2-)"
+	response="$(echo "$response" | cut -d ' ' -f 1)"
+	if [ "$response" = "OK" ]
+	then
+		echo $host/f/$result
+		echo $host/f/$result.$ext
+		echo $host/f/$result/$base
+	else
+		echo $response $result
+	fi
+done

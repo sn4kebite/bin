@@ -1,0 +1,70 @@
+#!/usr/bin/env python2
+
+paste_url = 'http://paste.example.com/'
+
+import os, pwd, urllib, httplib, optparse, sys, urlparse, tempfile, fnmatch
+
+parser = optparse.OptionParser()
+parser.add_option('-n', '--nick', default = pwd.getpwuid(os.getuid())[0])
+parser.add_option('-s', '--syntax', default = '')
+parser.add_option('-t', '--title', default = '')
+parser.add_option('-e', '--edit', action = 'store_true')
+
+lexers = []
+try:
+	from pygments.lexers import get_all_lexers
+	for i in get_all_lexers():
+		lexers.append((i[2], i[1][0]))
+except ImportError:
+	pass
+
+(options, args) = parser.parse_args()
+
+if len(args) > 1:
+	parser.print_help()
+	sys.exit(1)
+
+nick = options.nick
+syntax = options.syntax
+title = options.title
+if len(args) == 1:
+	if not title:
+		title = os.path.basename(args[0])
+
+	if not syntax and len(lexers):
+		for ps, l in lexers:
+			for p in ps:
+				if fnmatch.fnmatch(sys.argv[1], p):
+					syntax = l
+					break
+
+	text = open(args[0], 'r').read()
+else:
+	text = sys.stdin.read()
+
+if options.edit:
+	temp = tempfile.NamedTemporaryFile()
+	temp.file.write(text)
+	temp.file.flush()
+	os.system('$EDITOR "%s"' % temp.name)
+	temp.file.seek(0, 0)
+	text = temp.file.read()
+
+data = urllib.urlencode({
+	'type': 'Paste',
+	'nick': nick,
+	'syntax': syntax,
+	'title': title,
+	'text': text,
+})
+
+req_url = urlparse.urlparse(urlparse.urljoin(paste_url, 'paste'))
+http = httplib.HTTPConnection(req_url.netloc)
+http.request('POST', req_url.path, data, {'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'})
+response = http.getresponse()
+if response.status == 302:
+	dest_url = urlparse.urljoin(paste_url, response.getheader('location'))
+	print dest_url
+else:
+	print 'Error: Got code %d instead of 302' % response.status
+response.close()
