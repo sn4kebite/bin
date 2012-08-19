@@ -1,0 +1,12 @@
+#!/bin/bash
+if [ $# -ne 2 ]; then
+	echo "usage: $0 FILE1 FILE2"
+	echo "Result will be written to wallpaper#.png"
+	exit 1
+fi
+convert -page $[1920*2]x1200+0+0 "$1" -page +1920+0 "$2" -set dispose None -coalesce montage.png || exit 1
+rm montage-0.png
+i=1
+while [ -e "wallpaper$i.png" ]; do i=$[$i+1]; done
+mv montage-1.png wallpaper$i.png
+echo Wallpaper saved as wallpaper$i.png
