@@ -1,2 +1,30 @@
 #!/bin/sh
-~/.bin/nrk.py -e 'mplayer -cache 1024 -playlist {url}' "$1"
+
+player='mplayer --demuxer=mpegts -vo vdpau -vc ffh264vdpau,ffmpeg12vdpau,ffodivxvdpau,ffwmv3vdpau,ffvc1vdpau,'
+
+#~/.bin/nrk.py -e 'mplayer -cache 1024 -playlist {url}' "$1"
+n=1
+if [ "$1" = "-n" ]; then
+	n="$2"
+	shift
+	shift
+fi
+subs="$1"
+subs="${subs##*nrk.no/}"
+subs="${subs#*/}"
+subs="${subs#*/}"
+subs="${subs%%/*}"
+subsurl="http://tv.nrk.no/programsubtitles/$subs"
+ttmltempfile=$(mktemp)
+wget -qO "$ttmltempfile" "$subsurl"
+subsize=$(stat -c '%s' "$ttmltempfile")
+if [ $subsize -gt 0 ]; then
+	subtempfile=$(mktemp --suffix .nrk.srt)
+	ttml2srt "$ttmltempfile" > "$subtempfile"
+	rm -f "$ttmltempfile"
+	~/.bin/nrk.py "$1" | tail -n +$n | xargs curl -s | $player -sub "$subtempfile" --subdelay=-10 -
+	rm -f "$subtempfile"
+else
+	rm -f "$ttmltempfile"
+	~/.bin/nrk.py "$1" | tail -n +$n | xargs curl -s | $player -
+fi
