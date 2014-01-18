@@ -13,14 +13,20 @@ function recode_start() {
 	# enable job control
 	set -m
 
-	echo "Starting $threads threads..."
-	for thread in $(seq $threads); do
+	if [ ${#files[@]} -lt $threads ]; then
+		local_threads=${#files[@]}
+	else
+		local_threads=$threads
+	fi
+
+	echo "Starting $local_threads threads..."
+	for thread in $(seq $local_threads); do
 		spawn_recode
 	done
 
 	# spawn more jobs as they finish
 	while [ $fp -lt ${#files[@]} ]; do
-		[ $(jobs | wc -l) -lt $threads ] && spawn_recode
+		[ $(jobs | wc -l) -lt $local_threads ] && spawn_recode
 		# ideally we should do some kind of poll/select here
 		sleep .1
 	done
