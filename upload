@@ -1,29 +1,137 @@
-#!/bin/bash
+#!/usr/bin/env python2
 
-username="username"
-identifier="4c45138501a77c7aebfddb21d1f96d1b27d118df"
-host="http://example.com"
+import sys, os, getpass, urllib2, urlparse, urllib, json, mmap
+from argparse import ArgumentParser
+from ConfigParser import ConfigParser
 
-if [ $# -lt 1 ]
-then
-	echo "Usage: $0 FILE..."
-fi
+import xdg.BaseDirectory
+from poster.encode import multipart_encode
+from poster.streaminghttp import register_openers
 
-while [ $# -gt 0 ]
-do
-	file="$1"
-	base="$(basename "$file")"
-	ext="${base##*.}"
-	shift 1
-	response="$(curl -s -b "username=$username; identifier=$identifier" -F "file=@$file" -F "filename=$base" -F "api=1" -H 'Expect:' $host/u)"
-	result="$(echo "$response" | cut -d ' ' -f 2-)"
-	response="$(echo "$response" | cut -d ' ' -f 1)"
-	if [ "$response" = "OK" ]
-	then
-		echo $host/f/$result
-		echo $host/f/$result.$ext
-		echo $host/f/$result/$base
-	else
-		echo $response $result
-	fi
-done
+register_openers()
+
+config_path = xdg.BaseDirectory.load_first_config('pyfbin', 'config')
+
+parser = ArgumentParser()
+parser.add_argument('-U', '--url')
+parser.add_argument('-u', '--username')
+parser.add_argument('-p', '--password')
+parser.add_argument('-c', '--config', help = 'Config file (%(default)s)', default = config_path)
+parser.add_argument('-e', '--expire-token', action = 'store_true')
+parser.add_argument('filename', nargs = '*')
+
+args = parser.parse_args()
+
+if args.config:
+    config = ConfigParser()
+    config.read(config_path)
+    if not args.url and config.has_option('pyfbin', 'url'):
+        args.url = config.get('pyfbin', 'url')
+    if not args.username and config.has_option('pyfbin', 'username'):
+        args.username = config.get('pyfbin', 'username')
+    if not args.password and config.has_option('pyfbin', 'password'):
+        args.password = config.get('pyfbin', 'password')
+
+if not args.url:
+    args.print_usage()
+    sys.exit(1)
+
+data_path = None
+for path in xdg.BaseDirectory.load_data_paths('pyfbin'):
+    data_path = os.path.join(path, 'token')
+    break
+
+if data_path and os.path.exists(data_path):
+    token = open(data_path, 'r').read().strip()
+else:
+    token = None
+
+if args.expire_token:
+    if not token:
+        print 'No token to expire'
+        sys.exit(1)
+    u = urllib2.urlopen(urlparse.urljoin(args.url, 'a') + '?' + urllib.urlencode({'method': 'expire_token'}),
+            urllib.urlencode({'token': token}))
+    code = u.getcode()
+    u.read()
+    u.close()
+    if code == 200:
+        os.unlink(data_path)
+        print 'Token expired and deleted.'
+        sys.exit(0)
+    else:
+        print >> sys.stderr, 'expire_token replied with %s' % code
+        sys.exit(1)
+
+if not token:
+    if not args.username:
+        user = getpass.getuser()
+        args.username = raw_input('Username%s: ' % ((' [%s]' % user) if user else '')) or user
+        if not args.username:
+            print >> sys.stderr, 'No username entered.'
+            sys.exit(1)
+
+    if not args.password:
+        args.password = getpass.getpass()
+        if not args.password:
+            print >> sys.stderr, 'No password entered.'
+            sys.exit(1)
+
+    u = urllib2.urlopen(urlparse.urljoin(args.url, 'a') + '?' + urllib.urlencode({'method': 'get_token'}),
+            urllib.urlencode({'username': args.username, 'password': args.password}))
+    data = json.load(u)
+    if not data['status']:
+        print >> sys.stderr, data['message']
+        sys.exit(1)
+    token = data['token']
+    open(os.path.join(xdg.BaseDirectory.save_data_path('pyfbin'), 'token'), 'w').write(token)
+    print 'Token generated and stored.'
+
+if len(args.filename) == 0:
+    print 'Nothing to do.'
+    sys.exit(0)
+
+class ProgressFile(file):
+    def __init__(self, path):
+        super(ProgressFile, self).__init__(path, 'rb')
+        self.fm = mmap.mmap(self.fileno(), 0, access = mmap.ACCESS_READ)
+        self._total = os.path.getsize(path)
+        self._pos = 0
+        self._last_str = ''
+
+    def close(self):
+        sys.stdout.write('\x08' * len(self._last_str))
+        print 'Done!'
+        self.fm.close()
+        super(ProgressFile, self).close()
+
+    def read(self, size):
+        data = super(ProgressFile, self).read(size)
+        self._pos += len(data)
+        sys.stdout.write('\x08' * len(self._last_str))
+        self._last_str = '%.0f%%' % (float(self._pos) / self._total * 100)
+        sys.stdout.write(self._last_str)
+        sys.stdout.flush()
+        return data
+
+upload_url = urlparse.urljoin(args.url, 'u')
+for filename in args.filename:
+    sys.stdout.write('Uploading %s: ' % filename)
+    f = ProgressFile(filename)
+    data, headers = multipart_encode({'file': f, 'filename': os.path.basename(filename), 'api': '1'})
+    request = urllib2.Request(upload_url, data, headers)
+    request.add_header('Cookie', 'token=%s' % token)
+    response = urllib2.urlopen(request)
+    status, hash = response.read().split()
+    f.close()
+    if status != 'OK':
+        print status, hash
+        print
+        continue
+    ext = os.path.splitext(filename)[-1] or ''
+    print urlparse.urljoin(args.url, '/'.join(('f', hash)))
+    print urlparse.urljoin(args.url, '/'.join(('f', hash + ext)))
+    print urlparse.urljoin(args.url, '/'.join(('f', hash, os.path.basename(filename))))
+    print
+
+print 'Done.'
