@@ -8,7 +8,7 @@ fi
 function recode() {
 	file="$1"
 	echo "Recoding $file"
-	mp3file="$(sed 's/flac$/mp3/' <<< "$file")"
+	mp3file="$(sed 's/flac$/mp3/' <<< $(basename "$file"))"
 
 	artist=$(metaflac --show-tag=artist "$file" | cut -d = -f 2-)
 	title=$(metaflac --show-tag=title "$file" | cut -d = -f 2-)
