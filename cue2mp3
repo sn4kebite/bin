@@ -5,19 +5,23 @@
 
 if [ -f "$1" ]; then
 	i=0
-	for cuefile in *.cue; do
+	basedir=$(dirname "$1")
+	for cuefile in "$basedir/"*.cue; do
+		if [ "$cuefile" = "*.cue" ]; then
+			break
+		fi
 		i=$(($i + 1))
 	done
 	if [ $i -eq 1 ]; then
 		# precies 1 cuesheet gevonden
-		if grep -q "INDEX 01 00:00:00" *.cue ; then
+		if grep -q "INDEX 01 00:00:00" "$cuefile" ; then
 			echo -n
-			nice shntool split -t "%n %t" -f *.cue "$1"
+			nice shntool split -t "%n %t" -f "$cuefile" "$1"
 		else
 			echo "The first track has a pre-gap. Shntool will cut that off and put it in a seperate file."
 			echo "You don't want that. Please modify the cuesheet from:"
-			grep -m1 "INDEX 00" *.cue
-			grep -m1 "INDEX 01" *.cue
+			grep -m1 "INDEX 00" "$cuefile"
+			grep -m1 "INDEX 01" "$cuefile"
 			echo "to:"
 			echo "    INDEX 01 00:00:00"
 			exit 1
@@ -36,8 +40,8 @@ else
 	exit 1
 fi
 
-album=$(grep -m 1 TITLE *.cue | cut -d\" -f2)
-artist=$(grep -m 1 PERFORMER *.cue | cut -d\" -f2)
+album=$(grep -m 1 TITLE "$cuefile" | cut -d\" -f2)
+artist=$(grep -m 1 PERFORMER "$cuefile" | cut -d\" -f2)
 
 tracktotal=`ls [0-9]*.wav | wc -l`
 
